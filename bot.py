@@ -12,11 +12,13 @@ log = logging.getLogger('lol-news')
 TOKEN = os.environ['TELEGRAM_TOKEN'].strip()
 CHAT_ID = os.environ['TELEGRAM_CHAT_ID'].strip()
 MAX_ITEMS = 20
+MAX_PER_CATEGORY = 4
+MAX_PER_SOURCE = 3
 MAX_AGE_HOURS = 24
 NOW = datetime.now(timezone.utc)
 TZ = ZoneInfo('Asia/Tehran')
 STATE = Path('seen.json')
-TRANSLATE = os.getenv('TRANSLATE_TITLES', 'true').lower() == 'true'
+TRANSLATE = False  # English titles only
 SESSION = requests.Session()
 SESSION.headers.update({'User-Agent': 'Mozilla/5.0 (compatible; LoLNewsHunter/5.0)'})
 
@@ -100,17 +102,47 @@ def image_from_article(url):
     return ''
 
 def credibility(title, level, link):
-    if re.search(r'\b(rumou?r|speculat\w*|might|could|possibly|unconfirmed)\b', title, re.I):
-        return '🟣 شایعه و گمانه‌زنی', '#Rumor'
+    if re.search(r'\b(rumou?r\w*|speculat\w*|might|could|possibly|unconfirmed)\b', title, re.I):
+        return '🟣 RUMOR / SPECULATION', '#Rumor'
     if re.search(r'\b(leak\w*|reportedly|sources say)\b', title, re.I) or level == 'rumor':
-        return '🟠 لیک یا گزارش غیررسمی', '#Unconfirmed'
+        return '🟠 UNCONFIRMED REPORT', '#Unconfirmed'
     host = (urlparse(link).hostname or '').lower()
-    # Google News redirect links do not prove the publisher's identity.
-    if level == 'official' and (host == 'leagueoflegends.com' or host.endswith('.leagueoflegends.com') or host == 'lolesports.com' or host.endswith('.lolesports.com')):
-        return '🟢 رسمی و تأییدشده (منبع رسمی)', '#Official'
+    if level == 'official' and any(host == domain or host.endswith('.' + domain)
+                                   for domain in ('leagueoflegends.com', 'lolesports.com')):
+        return '🟢 OFFICIAL', '#Official'
     if level == 'official':
-        return '🔵 منتسب به منبع رسمی؛ لینک را بررسی کنید', '#VerifySource'
-    return '🟠 گزارش رسانه‌ای؛ نیازمند بررسی', '#Report'
+        return '🔵 OFFICIAL SOURCE CLAIM — VERIFY LINK', '#VerifySource'
+    return '🟠 MEDIA REPORT', '#Report'
+
+# Every article belongs to exactly one category. Order matters: leaks first,
+# then esports, skins/PBE, community, and finally general game updates.
+CATEGORY_ORDER = [
+    'Official & Game Updates',
+    'Skins & PBE',
+    'Esports & Transfers',
+    'Leaks & Rumors',
+    'Community, Bugs & Content',
+]
+CATEGORY_ICONS = {
+    'Official & Game Updates': '🛡️',
+    'Skins & PBE': '🎨',
+    'Esports & Transfers': '🏆',
+    'Leaks & Rumors': '🔍',
+    'Community, Bugs & Content': '🎬',
+}
+
+def category_for(item):
+    title = item['title']
+    source = item['source'].lower()
+    if item['level'] == 'rumor' or re.search(r'\b(leak\w*|rumou?r\w*|speculat\w*|unconfirmed)\b', title, re.I):
+        return 'Leaks & Rumors'
+    if re.search(r'\b(worlds|lck|lec|lpl|lcs|msi|esport\w*|roster|transfer\w*|tournament|playoffs|finals?|team signs|player joins)\b', title, re.I) or 'esport' in source or source == 'sheep esports':
+        return 'Esports & Transfers'
+    if re.search(r'\b(skin\w*|chroma\w*|cosmetic\w*|pbe|test server)\b', title, re.I) or source in ('skinspotlights', 'junglediff', 'spideraxe', 'league pbe'):
+        return 'Skins & PBE'
+    if re.search(r'\b(bug\w*|exploit\w*|glitch\w*|cinematic|trailer|lore|interview|video|creator|community)\b', title, re.I) or source == 'vandiril':
+        return 'Community, Bugs & Content'
+    return 'Official & Game Updates'
 
 def topic(title):
     for pattern, tag in [
@@ -178,17 +210,37 @@ for item in items:
     headlines.add(normalized)
     unique.append(item)
 
-sent = 0
+# Select a balanced batch before sending. Do not fill missing categories
+# with extra esports or any other overrepresented category.
+from collections import Counter
+selected = []
+category_counts = Counter()
+source_counts = Counter()
 for item in unique:
-    if sent >= MAX_ITEMS:
+    category = category_for(item)
+    if category_counts[category] >= MAX_PER_CATEGORY:
+        continue
+    if source_counts[item['source']] >= MAX_PER_SOURCE:
+        continue
+    item['category'] = category
+    selected.append(item)
+    category_counts[category] += 1
+    source_counts[item['source']] += 1
+    if len(selected) >= MAX_ITEMS:
         break
+
+log.info('LoL News Hunter v6 | candidates=%d selected=%d | %s',
+         len(unique), len(selected), ', '.join(f'{name}: {category_counts[name]}' for name in CATEGORY_ORDER))
+
+sent = 0
+for item in selected:
     label, status_tag = credibility(item['title'], item['level'], item['link'])
     published = item['date'].astimezone(TZ).strftime('%Y-%m-%d %H:%M')
-    translated = translate_title(item['title'])
-    heading = (f'🇮🇷 <b>{html.escape(translated)}</b>\n' if translated else '')
-    caption = (f'{heading}🎮 <b>{html.escape(item["title"])}</b>\n\n'
+    category = item['category']
+    caption = (f'{CATEGORY_ICONS[category]} <b>{html.escape(category)}</b>\n'
+               f'🎮 <b>{html.escape(item["title"])}</b>\n\n'
                f'{label}\n📍 {html.escape(item["source"])}\n'
-               f'🕒 {published} (ایران)\n'
+               f'🕒 {published} (Iran)\n'
                f'🔗 {html.escape(item["link"])}\n\n'
                f'#LeagueOfLegends {topic(item["title"])} {status_tag}')
     image_url = item['image'] or image_from_article(item['link'])
@@ -216,4 +268,4 @@ for item in unique:
         log.error('Telegram delivery failed for %s: %s', item['source'], exc)
 
 STATE.write_text(json.dumps(sorted(seen), ensure_ascii=False), encoding='utf-8')
-log.info('LoL News Hunter v5 | Sent %d / %d candidate news items', sent, len(unique))
+log.info('LoL News Hunter v6 | Sent %d / %d selected news items', sent, len(selected))

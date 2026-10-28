@@ -1,22 +1,17 @@
-# LoL News Hunter v5
+# LoL News Hunter v6
+
+Balanced English-language League of Legends news collector.
+
+- Every 6 hours (GitHub Actions cron; runs can be delayed).
+- Maximum 20 items per run, at most 4 from each of 5 categories.
+- Maximum 3 items from any single named source per run.
+- Categories: Official & Game Updates; Skins & PBE; Esports & Transfers; Leaks & Rumors; Community, Bugs & Content.
+- English titles and English credibility labels; no translation requests.
+- 24-hour publication window; avoids previously sent URLs using `seen.json`.
+- Images where available; text fallback; no general Reddit discussion feeds.
+- Reports per-source filter stats and selected-category counts in Actions logs.
 
 ## Install
-Replace `bot.py`, `requirements.txt`, and `.github/workflows/news.yml` in your GitHub repository (preserve directory structure). Commit to default branch. Keep existing repository secrets `TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID`. Enable **Settings > Actions > General > Workflow permissions > Read and write permissions**. Run **Actions > LoL News Hunter v5 > Run workflow** (not Re-run jobs on an older commit).
+Replace `bot.py`, `requirements.txt`, `.github/workflows/news.yml` in your GitHub repo and commit. Keep your existing `TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID` Actions secrets. In repository Settings > Actions > General, allow Read and write permissions so workflow can commit `seen.json`. Run a NEW workflow execution from main (not Re-run jobs).
 
-## Features
-- Up to 20 new items every 6 hours (Iran time), with a 24-hour freshness window.
-- Source-by-source diagnostics in GitHub Actions logs.
-- Editorial RSS + Google News discovery; no Reddit discussion feed.
-- Filters unrelated games, casual discussion posts, and irrelevant titles.
-- Prefers articles with images and attempts article OG image for direct article URLs.
-- Optional best-effort unofficial translation of titles via Google Translate endpoint (may fail; original English is retained).
-- Conservative credibility labels; Google News links do not establish an official publisher domain.
-- `seen.json` committed back to repository to prevent repeated URLs. GitHub Actions can be delayed and sources can be temporarily unavailable.
-
-## Caveats
-- No guarantee of 20 items or an image for every article.
-- Not a full-article summarizer, and machine-translated headlines should be reviewed before publication.
-- Google News indexes only a subset of posts; searches for X/YouTube personalities are indirect, not direct monitoring.
-- News from the same event under different titles can still be duplicated.
-- Some RSS sites may fail or block requests; source logs show failures.
-- News URLs from Google News are redirect links, not necessarily original publisher links.
+Notes: categories are inferred from title/source using rules, not AI verification. A story may be miscategorized. Google News searches do not guarantee discovery of every publisher post. 20 is a ceiling, not a target. Telegram captions use original English titles. Existing seen.json is preserved in the repo.
