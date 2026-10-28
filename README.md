@@ -1,5 +1,16 @@
-# LoL News Hunter
+# LoL News Hunter v3 — گزارش فارسی
 
-Replace your existing `bot.py`, `requirements.txt`, and `.github/workflows/news.yml` with these files. Keep GitHub Actions secrets `TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID`. GitHub Actions workflow permissions must allow writing repository contents. Use a **private** repository. The first run may send up to 12 items from the last 8 hours. The schedule is UTC and may be delayed. `seen.json` is committed automatically to remember successfully sent links; it is not a semantic duplicate detector.
+این نسخه هر شش ساعت با GitHub Actions اجرا می‌شود و تا ۱۲ عنوان تازه را از Reddit و Google News جمع می‌کند. برای هر خبر ترجمه فارسی تیتر (در صورت دسترس بودن سرویس رایگان ترجمه)، تیتر اصلی، زمان ثبت فید، لینک و برچسب اعتبار می‌فرستد. متن کامل مقالات خوانده یا خلاصه‌سازی معنایی نمی‌شود؛ خروجی **مرور فارسی تیترها** است.
 
-Reddit feeds and Google News searches are best-effort, not guaranteed exhaustive. X, YouTube, and asset archives are not directly polled. Labels are conservative heuristics, not fact-checks. The publication timestamp is taken from each feed and may not be the original publication time.
+## نصب
+
+سه فایل `bot.py`، `requirements.txt` و `.github/workflows/news.yml` را در مخزن قبلی جایگزین کنید. Secretهای `TELEGRAM_TOKEN` و `TELEGRAM_CHAT_ID` باید وجود داشته باشند. در Settings > Actions > General > Workflow permissions، دسترسی Read and write را فعال کنید. از Actions > LoL News Hunter > Run workflow تست بگیرید.
+
+## محدودیت‌ها
+
+- ترجمه از سرویس غیررسمی و رایگان انجام می‌شود؛ ممکن است محدود یا قطع شود. در آن صورت متن انگلیسی و موضوع فارسی می‌آید.
+- برچسب اعتبار از دامنه و کلیدواژه‌ها حدس زده می‌شود؛ تأیید واقعی نیست. لینک Google News ممکن است به خبر رسمی ارجاع دهد ولی به‌عنوان رسمی شناسایی نشود.
+- اجرای زمان‌بندی‌شده GitHub ممکن است دیر انجام شود؛ بازه بررسی ۸ ساعت است.
+- منابع X و YouTube مستقیماً دریافت نمی‌شوند؛ نام آن‌ها در جست‌وجوهای خبری است.
+- حذف تکراری فقط براساس لینک است. فایل seen.json در GitHub ذخیره می‌شود و مخزن باید Private بماند.
+- اگر خبر تازه‌ای نباشد، گزارشی ارسال نمی‌شود.
