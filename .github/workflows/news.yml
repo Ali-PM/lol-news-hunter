@@ -1,8 +1,8 @@
-name: LoL News Hunter v4
+name: LoL News Hunter v5
 on:
   workflow_dispatch:
   schedule:
-    # UTC 02:30,08:30,14:30,20:30 => Iran 06:00,12:00,18:00,00:00
+    # UTC: 02:30, 08:30, 14:30, 20:30 = Iran 06:00, 12:00, 18:00, 00:00
     - cron: '30 2,8,14,20 * * *'
 permissions:
   contents: write
@@ -12,21 +12,26 @@ concurrency:
 jobs:
   check-news:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           persist-credentials: true
-      - uses: actions/setup-python@v5
+      - name: Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -r requirements.txt
+      - name: Install
+        run: pip install -r requirements.txt
       - name: Check and send news
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TRANSLATE_TITLES: 'true'
         run: python bot.py
-      - name: Persist seen news
+      - name: Save seen news
+        if: success()
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
