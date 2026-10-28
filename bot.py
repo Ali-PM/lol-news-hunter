@@ -18,6 +18,8 @@ MAX_AGE_HOURS = 24
 NOW = datetime.now(timezone.utc)
 TZ = ZoneInfo('Asia/Tehran')
 STATE = Path('seen.json')
+ARCHIVE_URL = os.environ.get('ARCHIVE_URL', '').strip().rstrip('/')
+ARCHIVE_SECRET = os.environ.get('ARCHIVE_SECRET', '').strip()
 TRANSLATE = False  # English titles only
 SESSION = requests.Session()
 SESSION.headers.update({'User-Agent': 'Mozilla/5.0 (compatible; LoLNewsHunter/5.0)'})
@@ -266,6 +268,17 @@ for item in selected:
                 raise RuntimeError(resp.text[:200])
         seen.add(item['id'])
         sent += 1
+        if ARCHIVE_URL and ARCHIVE_SECRET:
+            try:
+                archive_resp = SESSION.post(ARCHIVE_URL + '/ingest', json={
+                    'id': item['id'], 'title': item['title'],
+                    'description': item['title'], 'url': item['link'],
+                    'source': item['source'], 'category': category,
+                    'published': published + ' (Iran)'
+                }, headers={'X-Ingest-Secret': ARCHIVE_SECRET}, timeout=15)
+                archive_resp.raise_for_status()
+            except requests.RequestException as archive_exc:
+                log.error('Archive save failed for %s: %s', item['source'], archive_exc)
         time.sleep(0.4)
     except (requests.RequestException, ValueError, RuntimeError) as exc:
         log.error('Telegram delivery failed for %s: %s', item['source'], exc)
