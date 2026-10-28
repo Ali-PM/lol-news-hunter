@@ -1,4 +1,4 @@
-name: LoL News Hunter v5
+name: LoL News Hunter v6
 on:
   workflow_dispatch:
   schedule:
