@@ -258,6 +258,9 @@ for item in selected:
             resp = SESSION.post(f'https://api.telegram.org/bot{TOKEN}/sendMessage', json={
                 'chat_id': CHAT_ID, 'text': caption, 'parse_mode': 'HTML', 'disable_web_page_preview': False
             }, timeout=25)
+            if not resp.ok:
+                logging.error("Telegram response: %s", resp.text[:500])
+                
             resp.raise_for_status()
             if not resp.json().get('ok'):
                 raise RuntimeError(resp.text[:200])
