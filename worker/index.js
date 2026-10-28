@@ -53,7 +53,7 @@ async function handle(env,update){
   if(m)await api(env,"editMessageText",{chat_id:msg.chat.id,message_id:msg.message_id,...await render(env,m[1],+m[2])});
   return;
  }
- const m=/^\/(start|help|history|latest|skins|esports|leaks)(?:@[\w]+)?(?:\s|$)/.exec(msg.text||"");
+ const m=/^\/(start|help|history|latest|skins|esports|leaks|ask)(?:@[\w]+)?(?:\s|$)/i.exec(msg.text||"");
  if(!m)return;
  if(m[1].toLowerCase()==="ask"){
   const question=(msg.text||"").slice(m[0].length).trim();
