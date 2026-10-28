@@ -1,13 +1,22 @@
-# LoL News Hunter v4
+# LoL News Hunter v5
 
-- Four runs daily (Iran local 00:00, 06:00, 12:00, 18:00), subject to GitHub schedule delays.
-- Up to 20 individual news messages per run, not guaranteed 20 if fewer eligible stories exist.
-- No Reddit feeds, TFT, Wild Rift, VALORANT, 2XKO; filters generic discussion headlines.
-- Uses direct RSS plus Google News RSS search for third-party sources. Coverage of Google News search is not exhaustive.
-- Tries RSS image, then article og:image on direct URLs; otherwise text with Telegram link preview.
-- Keeps source headline in English. Persian credibility labels and hashtags, **not** translated headlines or article summaries. Automated free translation/summarization requires an additional service and may have cost/limits.
-- Date shown is feed timestamp, which may differ from original publication time.
-- Credibility tags are heuristic, not independent verification. A Google News result found via official-domain query is not independently domain-verified; manually verify important stories.
-- `seen.json` persists to the repo via GitHub Actions with contents: write permission; Settings > Actions > General > Workflow permissions may need Read and write.
-- Install `bot.py`, `requirements.txt`, `.github/workflows/news.yml` to repo root / matching path. Keep secrets TELEGRAM_TOKEN and TELEGRAM_CHAT_ID.
-- First run may send older stories within 12h; later runs deduplicate by link. If GitHub cannot push seen.json, duplicates may recur.
+## Install
+Replace `bot.py`, `requirements.txt`, and `.github/workflows/news.yml` in your GitHub repository (preserve directory structure). Commit to default branch. Keep existing repository secrets `TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID`. Enable **Settings > Actions > General > Workflow permissions > Read and write permissions**. Run **Actions > LoL News Hunter v5 > Run workflow** (not Re-run jobs on an older commit).
+
+## Features
+- Up to 20 new items every 6 hours (Iran time), with a 24-hour freshness window.
+- Source-by-source diagnostics in GitHub Actions logs.
+- Editorial RSS + Google News discovery; no Reddit discussion feed.
+- Filters unrelated games, casual discussion posts, and irrelevant titles.
+- Prefers articles with images and attempts article OG image for direct article URLs.
+- Optional best-effort unofficial translation of titles via Google Translate endpoint (may fail; original English is retained).
+- Conservative credibility labels; Google News links do not establish an official publisher domain.
+- `seen.json` committed back to repository to prevent repeated URLs. GitHub Actions can be delayed and sources can be temporarily unavailable.
+
+## Caveats
+- No guarantee of 20 items or an image for every article.
+- Not a full-article summarizer, and machine-translated headlines should be reviewed before publication.
+- Google News indexes only a subset of posts; searches for X/YouTube personalities are indirect, not direct monitoring.
+- News from the same event under different titles can still be duplicated.
+- Some RSS sites may fail or block requests; source logs show failures.
+- News URLs from Google News are redirect links, not necessarily original publisher links.
