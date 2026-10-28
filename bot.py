@@ -1,212 +1,180 @@
-import hashlib
-import html
-import json
-import os
-import re
-import time
-from datetime import datetime, timedelta, timezone
+import os, re, json, time, hashlib, html, logging
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote, urlparse
 from zoneinfo import ZoneInfo
+import feedparser, requests
+from bs4 import BeautifulSoup
 
-import feedparser
-import requests
-
-TOKEN = os.environ['TELEGRAM_TOKEN']
-CHAT_ID = os.environ['TELEGRAM_CHAT_ID']
+logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s')
+TOKEN = os.environ['TELEGRAM_TOKEN'].strip()
+CHAT_ID = os.environ['TELEGRAM_CHAT_ID'].strip()
+MAX_ITEMS = 20
+MAX_AGE_HOURS = 12  # covers schedule delays; state prevents duplicates
 STATE = Path('seen.json')
-NOW = datetime.now(timezone.utc)
-CUTOFF = NOW - timedelta(hours=8)
 TZ = ZoneInfo('Asia/Tehran')
-MAX_ITEMS = 12
+NOW = datetime.now(timezone.utc)
+SESSION = requests.Session()
+SESSION.headers.update({'User-Agent':'LoLNewsHunter/4.0 (+RSS aggregator)'})
 
-REDDIT = {
-    'LoL Reddit': ('leagueoflegends', 'General'),
-    'LeaguePBE': ('LeaguePBE', 'PBE'),
-    'PedroPeepos': ('PedroPeepos', 'Esports'),
-    'LeagueOfMemes': ('LeagueOfMemes', 'Memes'),
-    'SummonerSchool': ('summonerschool', 'Guides'),
-}
-SEARCHES = {
-    'Riot Games': ('site:leagueoflegends.com/en-us/news/ League of Legends', 'Official'),
-    'LoL Esports': ('site:lolesports.com League of Legends', 'Esports'),
-    'Sheep Esports': ('site:sheepesports.com League of Legends', 'Esports'),
-    'JungleDiff': ('site:junglediff.net League of Legends PBE', 'PBE'),
-    'SkinSpotlights': ('SkinSpotlights League of Legends new skins', 'Skins'),
-    'Vandiril': ('Vandiril League of Legends bug', 'Bugs'),
-    'Necrit': ('Necrit League of Legends lore', 'Lore'),
-    'Spideraxe': ('Spideraxe League of Legends PBE changes', 'PBE'),
-    'Big Bad Bear': ('Big Bad Bear League of Legends leaks', 'Leaks'),
-    'LoL transfers': ('League of Legends esports roster transfer', 'Esports'),
-}
-TAGS = {'Official': '#Official', 'General': '#LoLNews', 'PBE': '#PBE',
-        'Esports': '#Esports', 'Memes': '#Memes', 'Guides': '#Guides',
-        'Skins': '#Skins', 'Bugs': '#Bugs', 'Lore': '#Lore', 'Leaks': '#Leaks'}
-TOPICS_FA = {'Official': 'خبر رسمی', 'General': 'اخبار و بحث جامعه بازیکنان',
-             'PBE': 'تغییرات آزمایشی PBE', 'Esports': 'رقابت‌ها و نقل‌وانتقالات',
-             'Memes': 'میم و سرگرمی', 'Guides': 'آموزش و متا',
-             'Skins': 'اسکین‌ها', 'Bugs': 'باگ و مکانیک',
-             'Lore': 'داستان بازی', 'Leaks': 'لیک و اطلاعات احتمالی'}
+# Direct editorial RSS + Google News site-specific discovery. No Reddit discussion feeds.
+DIRECT_FEEDS = [
+    ('NERFPLZ', 'https://www.nerfplz.com/feeds/posts/default', 'report'),
+    ('LoL News', 'https://lolnews.com/feed/', 'report'),
+    ('League Feed', 'https://leaguefeed.net/feed/', 'report'),
+]
+SEARCHES = [
+    ('Riot League', 'site:leagueoflegends.com/en-us/news/ League of Legends', 'official'),
+    ('Riot Esports', 'site:lolesports.com League of Legends Worlds LCK LEC', 'official'),
+    ('Sheep Esports', 'site:sheepesports.com League of Legends roster transfer', 'report'),
+    ('Dot Esports', 'site:dotesports.com/league-of-legends League of Legends', 'report'),
+    ('PCGamesN', 'site:pcgamesn.com/league-of-legends League of Legends', 'report'),
+    ('JungleDiff', 'JungleDiff League of Legends PBE changes', 'report'),
+    ('SkinSpotlights', 'SkinSpotlights League of Legends new skin preview', 'report'),
+    ('Vandiril', 'Vandiril League of Legends bug interaction video', 'report'),
+    ('Spideraxe', 'Spideraxe League of Legends PBE update', 'report'),
+    ('Big Bad Bear', 'Big Bad Bear League of Legends leak', 'rumor'),
+    ('Esports News', 'League of Legends esports roster transfer confirmed', 'report'),
+]
 
-session = requests.Session()
-session.headers.update({'User-Agent': 'LoLNewsHunter/3.0 (admin news digest)'})
-
-
-def get_feed(url):
-    response = session.get(url, timeout=25)
-    response.raise_for_status()
-    feed = feedparser.parse(response.content)
-    if feed.bozo and not feed.entries:
-        raise ValueError(str(feed.bozo_exception))
-    return feed.entries
-
-
-def published(entry):
-    for key in ('published_parsed', 'updated_parsed'):
-        value = entry.get(key)
-        if value:
-            return datetime(*value[:6], tzinfo=timezone.utc)
-    return None
-
-
-def credibility(source, title, link):
-    host = (urlparse(link).hostname or '').lower()
-    official = (host == 'leagueoflegends.com' or host.endswith('.leagueoflegends.com')
-                or host == 'lolesports.com' or host.endswith('.lolesports.com'))
-    if official:
-        return '✅ رسمی و تأییدشده', '#Official'
-    if re.search(r'\b(rumou?r|speculat\w*|theory|prediction|possibly|might|alleged)\b', title, re.I):
-        return '❔ شایعه و گمانه‌زنی', '#Rumor'
-    if re.search(r'\b(leak\w*|datamin\w*|unconfirmed)\b', title, re.I) or source == 'Big Bad Bear':
-        return '🟠 لیک یا گزارش غیررسمی', '#Unconfirmed'
-    return '🔎 گزارش یا محتوای غیررسمی؛ نیازمند بررسی', '#Community'
-
-
-def translate_headline(title, translator):
-    # Translation is optional and uses an unofficial free endpoint. No guarantee of availability.
-    if translator is None:
-        return None
-    try:
-        result = translator.translate(title[:450])
-        return result if result and result.strip() else None
-    except Exception as exc:
-        print('Translation unavailable:', type(exc).__name__)
-        return None
-
-
-def send_message(text):
-    response = session.post(
-        f'https://api.telegram.org/bot{TOKEN}/sendMessage',
-        json={'chat_id': CHAT_ID, 'text': text, 'parse_mode': 'HTML',
-              'disable_web_page_preview': True}, timeout=30)
-    response.raise_for_status()
-    data = response.json()
-    if not data.get('ok'):
-        raise RuntimeError(str(data))
-
+BLOCKED = re.compile(r'\b(teamfight tactics|\btft\b|valorant|2xko|wild rift|legends of runeterra)\b', re.I)
+DISCUSSION = re.compile(r'\b(how to|what do you think|anyone else|your opinion|my idea|suggestion|question|discussion|which champion|should riot|unpopular opinion|fan concept|tier list|guide to|tips for|i think|i wish)\b', re.I)
+NEWS_SIGNALS = re.compile(r'\b(patch|update|announc|reveal|release|new skin|skinline|pbe|balance|buff|nerf|rework|champion|worlds|lck|lec|lpl|lcs|msi|transfer|roster|sign|join|leave|depart|leak|rumor|report|bug|exploit|trailer|cinematic|event|esports|tournament|final|results?|interview|riot)\b', re.I)
 
 try:
-    seen = set(json.loads(STATE.read_text(encoding='utf-8')))
-except (OSError, ValueError, TypeError):
+    seen = set(json.loads(STATE.read_text(encoding='utf-8'))) if STATE.exists() else set()
+except (ValueError, OSError):
     seen = set()
 
-items = {}
-feeds_ok = 0
-for source, (sub, topic) in REDDIT.items():
-    url = f'https://www.reddit.com/r/{sub}/new/.rss?limit=50'
+def google_feed(q):
+    return 'https://news.google.com/rss/search?q=' + quote(q) + '&hl=en-US&gl=US&ceid=US:en'
+
+def get_feed(url):
+    r = SESSION.get(url, timeout=20)
+    r.raise_for_status()
+    return feedparser.parse(r.content).entries
+
+def entry_image(entry):
+    for media in entry.get('media_content', []) + entry.get('media_thumbnail', []):
+        if media.get('url', '').startswith('https://'):
+            return media['url']
+    for enc in entry.get('enclosures', []):
+        if enc.get('type', '').startswith('image/') and enc.get('href','').startswith('https://'):
+            return enc['href']
+    raw = entry.get('summary', '') or entry.get('description', '')
+    soup = BeautifulSoup(raw, 'html.parser')
+    img = soup.find('img')
+    return img.get('src', '') if img and img.get('src','').startswith('https://') else ''
+
+def article_image(url):
+    # Avoid fetching Google News redirect pages: not guaranteed to resolve to publisher.
+    if 'news.google.com' in urlparse(url).netloc:
+        return ''
     try:
-        entries = get_feed(url)
-        feeds_ok += 1
-        for e in entries:
-            dt, link = published(e), e.get('link', '')
-            if dt and CUTOFF <= dt <= NOW and link:
-                uid = hashlib.sha256(link.encode()).hexdigest()
-                items[uid] = (dt, uid, source, topic, e.get('title', ''), link)
-    except Exception as exc:
-        print(f'Feed failed: {source}: {exc}')
+        r = SESSION.get(url, timeout=8)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text[:250000], 'html.parser')
+        for key in ('og:image', 'twitter:image'):
+            tag = soup.find('meta', attrs={'property': key}) or soup.find('meta', attrs={'name': key})
+            if tag and tag.get('content', '').startswith('https://'):
+                return tag['content']
+    except requests.RequestException:
+        pass
+    return ''
 
-for source, (query, topic) in SEARCHES.items():
-    url = 'https://news.google.com/rss/search?q=' + quote(query) + '&hl=en-US&gl=US&ceid=US:en'
+def credibility(title, level):
+    if re.search(r'\b(rumou?r|speculat|might|could|possibly|unconfirmed)\b', title, re.I):
+        return '🟣 شایعه و گمانه‌زنی', '#Rumor'
+    if re.search(r'\b(leak|reportedly|sources say)\b', title, re.I) or level == 'rumor':
+        return '🟠 لیک یا گزارش غیررسمی', '#Unconfirmed'
+    if level == 'official':
+        return '🟢 رسمی و تأییدشده (منبع رسمی)', '#Official'
+    return '🟠 گزارش رسانه‌ای؛ نیازمند بررسی', '#Report'
+
+def topic(title):
+    rules = [
+        (r'\b(skin|cosmetic|chroma)\b', '#Skins'),
+        (r'\b(pbe|test server)\b', '#PBE'),
+        (r'\b(patch|buff|nerf|balance|item|rework)\b', '#Patch'),
+        (r'\b(worlds|lck|lec|lpl|lcs|msi|esport|roster|transfer|tournament|final)\b', '#Esports'),
+        (r'\b(bug|exploit|glitch)\b', '#Bugs'),
+        (r'\b(leak|rumor)\b', '#Leaks'),
+        (r'\b(trailer|cinematic|lore)\b', '#Lore'),
+    ]
+    return next((tag for pattern, tag in rules if re.search(pattern, title, re.I)), '#LoLNews')
+
+def parse_date(entry):
+    value = entry.get('published_parsed') or entry.get('updated_parsed')
+    if not value:
+        return None
+    return datetime(*value[:6], tzinfo=timezone.utc)
+
+def eligible(title, dt):
+    if not dt or dt > NOW + timedelta(minutes=5) or dt < NOW - timedelta(hours=MAX_AGE_HOURS):
+        return False
+    if BLOCKED.search(title) or DISCUSSION.search(title):
+        return False
+    return bool(NEWS_SIGNALS.search(title))
+
+items = []
+for source, url, level in DIRECT_FEEDS + [(name, google_feed(query), level) for name, query, level in SEARCHES]:
     try:
-        entries = get_feed(url)
-        feeds_ok += 1
-        for e in entries:
-            dt, link = published(e), e.get('link', '')
-            if dt and CUTOFF <= dt <= NOW and link:
-                uid = hashlib.sha256(link.encode()).hexdigest()
-                items.setdefault(uid, (dt, uid, source, topic, e.get('title', ''), link))
+        for entry in get_feed(url)[:25]:
+            title = html.unescape(BeautifulSoup(entry.get('title',''), 'html.parser').get_text(' ', strip=True))
+            link = entry.get('link', '')
+            dt = parse_date(entry)
+            if not link or not eligible(title, dt):
+                continue
+            uid = hashlib.sha256(link.encode()).hexdigest()
+            if uid in seen:
+                continue
+            items.append({'id':uid,'source':source,'title':title,'link':link,'date':dt,'level':level,'image':entry_image(entry)})
     except Exception as exc:
-        print(f'Feed failed: {source}: {exc}')
+        logging.warning('Feed failed %s: %s', source, exc)
 
-if not feeds_ok:
-    raise RuntimeError('All feeds failed. Retry next run.')
-
-candidates = sorted((item for uid, item in items.items() if uid not in seen),
-                    key=lambda x: x[0], reverse=True)
-selected, per_source = [], {}
-for item in candidates:
-    source = item[2]
-    if per_source.get(source, 0) >= 3:
+# Deduplicate same headline across publishers; prefer official and articles with RSS images.
+items.sort(key=lambda x: (x['level']=='official', bool(x['image']), x['date']), reverse=True)
+unique = []
+headlines = set()
+for item in items:
+    normalized = re.sub(r'[^a-z0-9 ]','', item['title'].lower())
+    normalized = re.sub(r'\s+',' ', normalized).strip()[:105]
+    if normalized in headlines:
         continue
-    selected.append(item)
-    per_source[source] = per_source.get(source, 0) + 1
-    if len(selected) == MAX_ITEMS:
+    headlines.add(normalized)
+    unique.append(item)
+
+sent = 0
+for item in unique:
+    if sent >= MAX_ITEMS:
         break
-
-translator = None
-if selected:
+    label, status_tag = credibility(item['title'], item['level'])
+    published = item['date'].astimezone(TZ).strftime('%Y-%m-%d %H:%M')
+    caption = (f'🎮 <b>{html.escape(item["title"])}</b>\n\n'
+               f'{label}\n📍 {html.escape(item["source"])}\n'
+               f'🕒 {published} (ایران)\n'
+               f'🔗 {html.escape(item["link"])}\n\n'
+               f'#LeagueOfLegends {topic(item["title"])} {status_tag}')
+    # A news source does not always expose an image; fall back to text, never invent one.
+    image_url = item['image'] or article_image(item['link'])
     try:
-        from deep_translator import GoogleTranslator
-        translator = GoogleTranslator(source='auto', target='fa')
+        if image_url and len(caption) <= 1024:
+            resp = SESSION.post(f'https://api.telegram.org/bot{TOKEN}/sendPhoto',
+                                data={'chat_id':CHAT_ID,'photo':image_url,'caption':caption,'parse_mode':'HTML'}, timeout=25)
+            if not resp.ok or not resp.json().get('ok'):
+                logging.warning('Photo unavailable; sending text: %s', resp.text[:160])
+                image_url = ''
+        if not image_url:
+            resp = SESSION.post(f'https://api.telegram.org/bot{TOKEN}/sendMessage',
+                                json={'chat_id':CHAT_ID,'text':caption,'parse_mode':'HTML', 'disable_web_page_preview':False}, timeout=25)
+        resp.raise_for_status()
+        if not resp.json().get('ok'):
+            raise RuntimeError(resp.text)
+        seen.add(item['id'])
+        sent += 1
+        time.sleep(0.5)
     except Exception as exc:
-        print('Translator unavailable:', type(exc).__name__)
+        logging.error('Telegram delivery failed: %s', exc)
 
-# A single digest (split into parts only if Telegram's 4096-character limit requires it).
-header = ('🎮 <b>گزارش ۶ ساعته League of Legends</b>\n'
-          f'🕒 زمان تهیه: {NOW.astimezone(TZ):%Y-%m-%d %H:%M} (ایران)\n'
-          '📌 تاریخ‌ها مربوط به زمان ثبت در فید هستند، نه لزوماً انتشار اولیه.\n'
-          '⚠️ برچسب اعتبار خودکار است؛ قبل از انتشار عمومی بررسی کنید.\n')
-if not selected:
-    print(f'Feeds OK: {feeds_ok}; no new items. No digest sent.')
-else:
-    blocks = []
-    for index, (dt, uid, source, topic, title, link) in enumerate(selected, 1):
-        label, trust_tag = credibility(source, title, link)
-        translated = translate_headline(title, translator)
-        fa_headline = translated or f'موضوع: {TOPICS_FA[topic]} (ترجمه در دسترس نیست)'
-        local = dt.astimezone(TZ).strftime('%Y-%m-%d %H:%M')
-        block = (f'\n<b>{index}. {html.escape(fa_headline)}</b>\n'
-                 f'📰 {html.escape(title[:240])}\n'
-                 f'🏷 {label} | {html.escape(TOPICS_FA[topic])}\n'
-                 f'📍 {html.escape(source)} | 🕒 {local}\n'
-                 f'<a href="{html.escape(link, quote=True)}">مشاهده منبع</a>\n'
-                 f'{TAGS[topic]} {trust_tag}')
-        blocks.append((uid, block))
-
-    # Chunk at safe boundaries; mark IDs as seen only after their message is delivered.
-    batches = []
-    current_text, current_ids = header, []
-    for uid, block in blocks:
-        if len(current_text) + len(block) > 3800 and current_ids:
-            batches.append((current_text, current_ids))
-            current_text, current_ids = header + '📄 ادامه گزارش\n', []
-        current_text += block + '\n'
-        current_ids.append(uid)
-    if current_ids:
-        batches.append((current_text, current_ids))
-
-    sent = 0
-    for message, ids in batches:
-        try:
-            send_message(message)
-            seen.update(ids)
-            sent += len(ids)
-            time.sleep(0.5)
-        except Exception as exc:
-            print('Telegram digest failed:', exc)
-            break
-
-    STATE.write_text(json.dumps(sorted(seen), ensure_ascii=False), encoding='utf-8')
-    print(f'Feeds OK: {feeds_ok}; candidates: {len(candidates)}; sent items: {sent}')
-    if sent == 0:
-        raise RuntimeError('Telegram digest was not sent.')
+STATE.write_text(json.dumps(sorted(seen), ensure_ascii=False), encoding='utf-8')
+logging.info('LoL News Hunter v4 | Sent %s / %s candidate news items', sent, len(unique))

@@ -1,16 +1,13 @@
-# LoL News Hunter v3 — گزارش فارسی
+# LoL News Hunter v4
 
-این نسخه هر شش ساعت با GitHub Actions اجرا می‌شود و تا ۱۲ عنوان تازه را از Reddit و Google News جمع می‌کند. برای هر خبر ترجمه فارسی تیتر (در صورت دسترس بودن سرویس رایگان ترجمه)، تیتر اصلی، زمان ثبت فید، لینک و برچسب اعتبار می‌فرستد. متن کامل مقالات خوانده یا خلاصه‌سازی معنایی نمی‌شود؛ خروجی **مرور فارسی تیترها** است.
-
-## نصب
-
-سه فایل `bot.py`، `requirements.txt` و `.github/workflows/news.yml` را در مخزن قبلی جایگزین کنید. Secretهای `TELEGRAM_TOKEN` و `TELEGRAM_CHAT_ID` باید وجود داشته باشند. در Settings > Actions > General > Workflow permissions، دسترسی Read and write را فعال کنید. از Actions > LoL News Hunter > Run workflow تست بگیرید.
-
-## محدودیت‌ها
-
-- ترجمه از سرویس غیررسمی و رایگان انجام می‌شود؛ ممکن است محدود یا قطع شود. در آن صورت متن انگلیسی و موضوع فارسی می‌آید.
-- برچسب اعتبار از دامنه و کلیدواژه‌ها حدس زده می‌شود؛ تأیید واقعی نیست. لینک Google News ممکن است به خبر رسمی ارجاع دهد ولی به‌عنوان رسمی شناسایی نشود.
-- اجرای زمان‌بندی‌شده GitHub ممکن است دیر انجام شود؛ بازه بررسی ۸ ساعت است.
-- منابع X و YouTube مستقیماً دریافت نمی‌شوند؛ نام آن‌ها در جست‌وجوهای خبری است.
-- حذف تکراری فقط براساس لینک است. فایل seen.json در GitHub ذخیره می‌شود و مخزن باید Private بماند.
-- اگر خبر تازه‌ای نباشد، گزارشی ارسال نمی‌شود.
+- Four runs daily (Iran local 00:00, 06:00, 12:00, 18:00), subject to GitHub schedule delays.
+- Up to 20 individual news messages per run, not guaranteed 20 if fewer eligible stories exist.
+- No Reddit feeds, TFT, Wild Rift, VALORANT, 2XKO; filters generic discussion headlines.
+- Uses direct RSS plus Google News RSS search for third-party sources. Coverage of Google News search is not exhaustive.
+- Tries RSS image, then article og:image on direct URLs; otherwise text with Telegram link preview.
+- Keeps source headline in English. Persian credibility labels and hashtags, **not** translated headlines or article summaries. Automated free translation/summarization requires an additional service and may have cost/limits.
+- Date shown is feed timestamp, which may differ from original publication time.
+- Credibility tags are heuristic, not independent verification. A Google News result found via official-domain query is not independently domain-verified; manually verify important stories.
+- `seen.json` persists to the repo via GitHub Actions with contents: write permission; Settings > Actions > General > Workflow permissions may need Read and write.
+- Install `bot.py`, `requirements.txt`, `.github/workflows/news.yml` to repo root / matching path. Keep secrets TELEGRAM_TOKEN and TELEGRAM_CHAT_ID.
+- First run may send older stories within 12h; later runs deduplicate by link. If GitHub cannot push seen.json, duplicates may recur.
