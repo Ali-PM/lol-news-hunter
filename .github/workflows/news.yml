@@ -1,38 +1,49 @@
-name: LoL News Hunter
+
+name: LoL News Hunter v3
+
 on:
-  schedule:
-    # 00:00, 06:00, 12:00, 18:00 Iran time (UTC+03:30)
-    - cron: '30 2,8,14,20 * * *'
   workflow_dispatch:
+  schedule:
+    - cron: "30 2,8,14,20 * * *"
+
 permissions:
   contents: write
+
 concurrency:
   group: lol-news-hunter
   cancel-in-progress: false
+
 jobs:
   check-news:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          persist-credentials: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+          python-version: "3.11"
+
       - name: Install dependencies
         run: pip install -r requirements.txt
+
       - name: Check and send news
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python bot.py
-      - name: Persist sent links
+
+      - name: Save seen news
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add seen.json
-          if ! git diff --cached --quiet; then
-            git commit -m 'Update sent news state [skip ci]'
-            git push
+          if [ -f seen.json ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add seen.json
+            if ! git diff --cached --quiet; then
+              git commit -m "Update seen news"
+              git push
+            fi
           fi
