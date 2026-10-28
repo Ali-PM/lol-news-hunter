@@ -10,3 +10,7 @@ CREATE TABLE IF NOT EXISTS articles (
 );
 CREATE INDEX IF NOT EXISTS idx_articles_time ON articles(delivered_at DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_category ON articles(category, delivered_at DESC);
+CREATE TABLE IF NOT EXISTS ai_usage (
+  user_day TEXT PRIMARY KEY,
+  used INTEGER NOT NULL DEFAULT 0
+);
