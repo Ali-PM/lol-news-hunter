@@ -26,7 +26,7 @@ if STATE.exists():
     first_run = False
 else:
     seen = set()
-    first_run = True
+    first_run = False
 
 candidates = []
 
