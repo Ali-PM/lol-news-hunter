@@ -1,4 +1,4 @@
-const CATS={skins:"Skins & PBE",esports:"Esports & Transfers",leaks:"Leaks & Rumors"};
+const CATS={official:"Official & Game Updates",skins:"Skins & PBE",esports:"Esports & Transfers",leaks:"Leaks & Rumors",community:"Community, Bugs & Content"};
 const api=(env,method,payload)=>fetch("https://api.telegram.org/bot"+env.TELEGRAM_TOKEN+"/"+method,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
 const esc=s=>String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
 const short=(s,n)=>{const x=String(s??"").replace(/\s+/g," ").trim();return x.length>n?x.slice(0,n-1)+"…":x};
@@ -114,12 +114,12 @@ async function handle(env,update){
  if(!await isMember(env,actor.id)){if(cb)await api(env,"answerCallbackQuery",{callback_query_id:cb.id,text:"Members only",show_alert:true});return;}
  if(cb){
   if(cb.data==="noop"){await api(env,"answerCallbackQuery",{callback_query_id:cb.id});return;}
-  const m=/^a:(history|latest|skins|esports|leaks):(\d{1,5})$/.exec(cb.data||"");
+  const m=/^a:(history|latest|official|skins|esports|leaks|community):(\d{1,5})$/.exec(cb.data||"");
   await api(env,"answerCallbackQuery",{callback_query_id:cb.id});
   if(m)await api(env,"editMessageText",{chat_id:msg.chat.id,message_id:msg.message_id,...await render(env,m[1],+m[2])});
   return;
  }
- const m=/^\/(start|help|history|latest|skins|esports|leaks|ask)(?:@[\w]+)?(?:\s|$)/i.exec(msg.text||"");
+ const m=/^\/(start|help|history|latest|official|skins|esports|leaks|community|ask)(?:@[\w]+)?(?:\s|$)/i.exec(msg.text||"");
  if(!m)return;
  if(m[1].toLowerCase()==="ask"){
   const question=(msg.text||"").slice(m[0].length).trim();
@@ -127,7 +127,7 @@ async function handle(env,update){
   else if(question.length>1000)await api(env,"sendMessage",{chat_id:msg.chat.id,text:"Please keep your question under 1000 characters."});
   else {const answer=await askLol(env,actor.id,question);await api(env,"sendMessage",{chat_id:msg.chat.id,text:"🤖 LoL AI\n\n"+answer,reply_to_message_id:msg.message_id});}
  }
- else if(["start","help"].includes(m[1]))await api(env,"sendMessage",{chat_id:msg.chat.id,text:"🎮 LoL News Hunter v7\n/history — News archive\n/latest — Latest articles\n/skins — Skins & PBE\n/esports — Esports & transfers\n/leaks — Leaks & rumors\n/help — Commands\n\n/ask <question> — Ask LoL AI (20/day)."});
+ else if(["start","help"].includes(m[1]))await api(env,"sendMessage",{chat_id:msg.chat.id,text:"🎮 LoL News Hunter v7\n/history — News archive\n/latest — Latest articles\n/official — Official & game updates\n/skins — Skins & PBE\n/esports — Esports & transfers\n/leaks — Leaks & rumors\n/community — Memes, bugs & community\n/help — Commands\n\n/ask <question> — Ask LoL AI (20/day)."});
  else await api(env,"sendMessage",{chat_id:msg.chat.id,...await render(env,m[1],1)});
 }
 export default {async fetch(request,env,ctx){
