@@ -48,6 +48,7 @@ async function askLol(env,userId,question){
  try{
   let response=await callGemini(payload);
   let grounded=useSearch&&response.ok;
+  let searchAttempted=useSearch;
   if(!response.ok&&useSearch&&[400,404,422].includes(response.status)){
    console.warn("Grounding unsupported; retrying without search",response.status);
    delete payload.tools;
@@ -60,7 +61,7 @@ async function askLol(env,userId,question){
     const err=await response.json();
     details={status:err?.error?.status||"unknown",message:String(err?.error?.message||"").slice(0,1200),quota:JSON.stringify((err?.error?.details||[]).filter(x=>String(x?.["@type"]||"").includes("QuotaFailure")).map(x=>x.violations||[])).slice(0,1200)};
    }catch(e){details={parseError:String(e)};}
-   console.error("Gemini API failure",{httpStatus:response.status,model,searchEnabled:grounded,details});
+   console.error("Gemini API failure",{httpStatus:response.status,model,searchAttempted,details});
    return response.status===429?"⏳ AI is busy or quota is exhausted. Try later.":"⚠️ AI service unavailable. Try later.";
   }
   const data=await response.json();
