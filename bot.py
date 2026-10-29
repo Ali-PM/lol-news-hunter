@@ -146,6 +146,8 @@ CATEGORY_ICONS = {
 def category_for(item):
     title = item['title']
     source = item['source'].lower()
+    if item['level'] == 'community':
+        return 'Community, Bugs & Content'
     if item['level'] == 'rumor' or re.search(r'\b(leak\w*|rumou?r\w*|speculat\w*|unconfirmed)\b', title, re.I):
         return 'Leaks & Rumors'
     if re.search(r'\b(worlds|lck|lec|lpl|lcs|msi|esport\w*|roster|transfer\w*|tournament|playoffs|finals?|team signs|player joins)\b', title, re.I) or 'esport' in source or source == 'sheep esports':
@@ -205,7 +207,7 @@ for source, url, level in DIRECT_FEEDS + [(name, google_feed(query), level) for 
             if uid in seen:
                 stats['seen'] += 1
                 continue
-            if level == 'community' and (re.search(r'(?i)\\b(nsfw|spoiler|self.promo|advertis|commission|giveaway)\\b', title) or not re.search(r'(?i)\\b(league|lol|champion|aram|ranked|meme|skin|riot|jinx|teemo|yasuo|ahri|lux|funny|outplay|penta|clip|game)\\b', title)):
+            if level == 'community' and re.search(r'(?i)\b(nsfw|spoiler|advertis|commission|giveaway)\b', title):
                 stats['filtered'] += 1
                 continue
             items.append({'id': uid, 'source': source, 'title': title, 'link': link, 'date': dt, 'level': level, 'image': image_from_entry(entry)})
