@@ -11,8 +11,8 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s')
 log = logging.getLogger('lol-news')
 TOKEN = os.environ['TELEGRAM_TOKEN'].strip()
 CHAT_ID = os.environ['TELEGRAM_CHAT_ID'].strip()
-MAX_ITEMS = 20
-MAX_PER_CATEGORY = 4
+MAX_ITEMS = 5
+MAX_PER_CATEGORY = 1
 MAX_PER_SOURCE = 5
 MAX_AGE_HOURS = 24
 NOW = datetime.now(timezone.utc)
