@@ -26,8 +26,8 @@ async function render(env,cmd,page){
 async function askLol(env,userId,question){
  if(!env.GEMINI_API_KEY)return "⚠️ AI is not configured yet.";
  const day=new Date().toISOString().slice(0,10), key=day+":"+userId;
- const row=await env.DB.prepare("INSERT INTO ai_usage(user_day,used) VALUES(?,1) ON CONFLICT(user_day) DO UPDATE SET used=used+1 WHERE used<10 RETURNING used").bind(key).first();
- if(!row)return "⏳ Daily limit reached (10 questions). Try again tomorrow (UTC).";
+ const row=await env.DB.prepare("INSERT INTO ai_usage(user_day,used) VALUES(?,1) ON CONFLICT(user_day) DO UPDATE SET used=used+1 WHERE used<20 RETURNING used").bind(key).first();
+ if(!row)return "⏳ Daily limit reached (20 questions). Try again tomorrow (UTC).";
  const model=env.GEMINI_MODEL||"gemini-2.5-flash";
  const today=new Date().toISOString().slice(0,10);
  let archive=[];
@@ -54,7 +54,15 @@ async function askLol(env,userId,question){
    response=await callGemini(payload);
    grounded=false;
   }
-  if(!response.ok){console.error("Gemini HTTP",response.status);return response.status===429?"⏳ AI is busy or quota is exhausted. Try later.":"⚠️ AI service unavailable. Try later.";}
+  if(!response.ok){
+   let details={};
+   try{
+    const err=await response.json();
+    details={status:err?.error?.status||"unknown",message:String(err?.error?.message||"").slice(0,1200),quota:JSON.stringify((err?.error?.details||[]).filter(x=>String(x?.["@type"]||"").includes("QuotaFailure")).map(x=>x.violations||[])).slice(0,1200)};
+   }catch(e){details={parseError:String(e)};}
+   console.error("Gemini API failure",{httpStatus:response.status,model,searchEnabled:grounded,details});
+   return response.status===429?"⏳ AI is busy or quota is exhausted. Try later.":"⚠️ AI service unavailable. Try later.";
+  }
   const data=await response.json();
   const candidate=data.candidates?.[0];
   const answer=(candidate?.content?.parts||[]).map(p=>p.text||"").join("").trim();
@@ -85,7 +93,7 @@ async function handle(env,update){
   else if(question.length>1000)await api(env,"sendMessage",{chat_id:msg.chat.id,text:"Please keep your question under 1000 characters."});
   else {const answer=await askLol(env,actor.id,question);await api(env,"sendMessage",{chat_id:msg.chat.id,text:"🤖 LoL AI\n\n"+answer,reply_to_message_id:msg.message_id});}
  }
- else if(["start","help"].includes(m[1]))await api(env,"sendMessage",{chat_id:msg.chat.id,text:"🎮 LoL News Hunter v7\n/history — News archive\n/latest — Latest articles\n/skins — Skins & PBE\n/esports — Esports & transfers\n/leaks — Leaks & rumors\n/help — Commands\n\n/ask <question> — Ask LoL AI (10/day)."});
+ else if(["start","help"].includes(m[1]))await api(env,"sendMessage",{chat_id:msg.chat.id,text:"🎮 LoL News Hunter v7\n/history — News archive\n/latest — Latest articles\n/skins — Skins & PBE\n/esports — Esports & transfers\n/leaks — Leaks & rumors\n/help — Commands\n\n/ask <question> — Ask LoL AI (20/day)."});
  else await api(env,"sendMessage",{chat_id:msg.chat.id,...await render(env,m[1],1)});
 }
 export default {async fetch(request,env,ctx){
