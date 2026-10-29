@@ -26,7 +26,7 @@ async function render(env,cmd,page){
 async function riotContext(question){
  const q=question.toLowerCase();
  if(!/(patch|پچ|26\\.\\d+|skin|اسکین|update|آپدیت|تغییرات|جدید|latest|اخبار)/i.test(q))return [];
- const pages=["https://www.leagueoflegends.com/en-us/news/game-updates/","https://www.leagueoflegends.com/en-us/news/"];
+ const pages=["https://www.leagueoflegends.com/en-us/news/tags/patch-notes/","https://www.leagueoflegends.com/en-us/news/game-updates/","https://www.leagueoflegends.com/en-us/news/"];
  const out=[];
  for(const page of pages){
   try{
