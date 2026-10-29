@@ -25,7 +25,7 @@ async function render(env,cmd,page){
 }
 async function riotContext(question){
  const q=question.toLowerCase();
- if(!/(patch|پچ|26\\.\\d+|skin|اسکین|update|آپدیت|تغییرات|جدید|latest|اخبار)/i.test(q))return [];
+ if(!/(patch|پچ|26\.\d+|skin|اسکین|update|آپدیت|تغییرات|جدید|latest|اخبار)/i.test(q))return [];
  const pages=["https://www.leagueoflegends.com/en-us/news/tags/patch-notes/","https://www.leagueoflegends.com/en-us/news/game-updates/","https://www.leagueoflegends.com/en-us/news/"];
  const out=[];
  for(const page of pages){
@@ -34,8 +34,8 @@ async function riotContext(question){
    if(!res.ok)continue;
    const html=(await res.text()).slice(0,350000);
    const matches=[...html.matchAll(/href=["']([^"'?#]+)["']/g)].map(m=>m[1]);
-   const links=[...new Set(matches.map(s=>{try{return new URL(s,page).href}catch{return ""}}).filter(u=>u.startsWith("https://www.leagueoflegends.com/en-us/news/")&&/\\/(?:patch|game-updates|skins|dev|esports)[^/]*|patch-notes|skin/i.test(u)&&u!==page))];
-   const patch=q.match(/(?:26\\.\\d+|25\\.\\d+)/)?.[0];
+   const links=[...new Set(matches.map(s=>{try{return new URL(s,page).href}catch{return ""}}).filter(u=>u.startsWith("https://www.leagueoflegends.com/en-us/news/")&&/\/(?:patch|game-updates|skins|dev|esports)[^/]*|patch-notes|skin/i.test(u)&&u!==page))];
+   const patch=q.match(/(?:26\.\d+|25\.\d+)/)?.[0];
    const ranked=links.map(url=>({url,score:(patch&&url.includes(patch.replace(".","-"))?100:0)+(/patch|پچ/i.test(q)&&url.includes("patch")?20:0)+(/skin|اسکین/i.test(q)&&/skin/i.test(url)?20:0)})).sort((a,b)=>b.score-a.score);
    for(const {url} of ranked.slice(0,3)){
     if(out.some(x=>x.url===url))continue;
@@ -43,9 +43,9 @@ async function riotContext(question){
      const article=await fetch(url,{headers:{"Accept":"text/html"},signal:AbortSignal.timeout(5500)});
      if(!article.ok)continue;
      const raw=(await article.text()).slice(0,350000);
-     const title=(raw.match(/<title[^>]*>([^<]+)<\\/title>/i)||[])[1]||url.split("/").filter(Boolean).pop();
+     const title=(raw.match(/<title[^>]*>([^<]+)<\/title>/i)||[])[1]||url.split("/").filter(Boolean).pop();
      const description=(raw.match(/<meta[^>]+(?:name=["']description["'][^>]+content=["']([^"']+)|content=["']([^"']+)["'][^>]+name=["']description["'])/i)||[]).slice(1).find(Boolean)||"";
-     const text=raw.replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/gi," ").replace(/<style\\b[^>]*>[\\s\\S]*?<\\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&(?:nbsp|amp|quot|#39);/g," ").replace(/\\s+/g," ").trim().slice(0,5500);
+     const text=raw.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi," ").replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&(?:nbsp|amp|quot|#39);/g," ").replace(/\s+/g," ").trim().slice(0,5500);
      out.push({title,description,text,url});
     }catch(e){console.warn("Riot article unavailable",String(e))}
    }
