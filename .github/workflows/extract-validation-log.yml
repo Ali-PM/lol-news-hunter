@@ -1,0 +1,44 @@
+name: Extract validation evaluation log
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install PDF text extractor
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+
+      - name: Extract PDF text
+        run: |
+          pdf="Evaluation_Log_val (7).pdf"
+          test -s "$pdf"
+          pdftotext -layout "$pdf" "Evaluation_Log_val_extracted.txt"
+          test -s "Evaluation_Log_val_extracted.txt"
+
+      - name: Upload extracted text as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-log-text
+          path: Evaluation_Log_val_extracted.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Commit extracted text for review
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "Evaluation_Log_val_extracted.txt"
+          if ! git diff --cached --quiet; then
+            git commit -m "Extract validation evaluation log text"
+            git push
+          fi
